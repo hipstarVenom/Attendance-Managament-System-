@@ -180,47 +180,69 @@ public class StudentDashboard extends JFrame {
     return p;
 }
 
-    private JPanel makeTimetablePanel() {
-        String[] cols = {"Day", "Hour", "Class", "Subject"};
-        List<Object[]> rows = new ArrayList<>();
-        String sql =
-                "SELECT t.day, t.hour, c.id, c.name, s.id, s.name " +
-                        "FROM timetable t " +
-                        " JOIN classes c ON t.class_id = c.id" +
-                        " JOIN subjects s ON t.subject_id = s.id" +
-                        " WHERE t.class_id IN (SELECT class_id FROM student_classes WHERE student_id = ?) " +
-                        " ORDER BY CASE t.day " +
-                        "    WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 " +
-                        "    WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 ELSE 5 END, t.hour";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, studentId);
-            ResultSet rs = ps.executeQuery();
-            while (rs.next())
-                rows.add(new Object[]{
-                        rs.getString(1), rs.getInt(2),
-                        rs.getInt(3), rs.getString(4),
-                        rs.getInt(5), rs.getString(6)
-                });
-        } catch (SQLException ex) {
-            showError("Could not load timetable: " + ex.getMessage());
-        }
+private JPanel makeTimetablePanel() {
+    String[] columns = {"Day", "8:00 - 9:00", "9:00 - 10:00", "10:00 - 11:00", "11:00 - 12:00", "12:00 - 1:00", "1:00 - 2:00", "2:00 - 3:00"};
+    List<Object[]> rows = new ArrayList<>();
+    String sql = "SELECT t.day, t.hour, s.name " +
+                 "FROM timetable t " +
+                 "JOIN subjects s ON t.subject_id = s.id " +
+                 "WHERE t.class_id IN (SELECT class_id FROM student_classes WHERE student_id = ?) " +
+                 "ORDER BY CASE t.day " +
+                 "    WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 " +
+                 "    WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 ELSE 5 END, t.hour";
 
-        Object[][] data = new Object[rows.size()][4];
-        for (int i = 0; i < rows.size(); i++) {
-            Object[] r = rows.get(i);
-            data[i] = new Object[]{r[0], r[1], r[3], r[5]};
-        }
-
-        JTable table = new JTable(data, cols);
-        table.setRowHeight(24);
-
-        JPanel p = new JPanel(new BorderLayout(10,10));
-        p.setBorder(new EmptyBorder(10,10,10,10));
-        p.add(new JScrollPane(table), BorderLayout.CENTER);
-        p.add(new JLabel("Your Timetable", SwingConstants.CENTER), BorderLayout.SOUTH);
-        return p;
+    // Map to store subjects for each day and period
+    Map<String, String[]> timetableData = new HashMap<>();
+    
+    // Initialize timetable data with empty subjects
+    for (String day : new String[]{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}) {
+        timetableData.put(day, new String[7]);  // 7 periods (8 AM to 3 PM)
     }
 
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        ps.setInt(1, studentId);
+        ResultSet rs = ps.executeQuery();
+        while (rs.next()) {
+            String day = rs.getString("day");
+            int hour = rs.getInt("hour") - 1;  // Adjusting index for 0-based array
+            String subject = rs.getString("name");
+
+            // Assign the subject to the corresponding day and hour
+            if (hour >= 0 && hour < 7) {
+                timetableData.get(day)[hour] = subject;
+            }
+        }
+    } catch (SQLException ex) {
+        showError("Could not load timetable: " + ex.getMessage());
+    }
+
+    // Populate rows with timetable data for each day
+    for (String day : new String[]{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}) {
+        Object[] row = new Object[columns.length];
+        row[0] = day;
+
+        String[] subjects = timetableData.get(day);
+        for (int i = 0; i < 7; i++) {
+            row[i + 1] = subjects[i] != null ? subjects[i] : "-";  // If no subject, show "-"
+        }
+
+        rows.add(row);
+    }
+
+    Object[][] data = new Object[rows.size()][columns.length];
+    for (int i = 0; i < rows.size(); i++) {
+        data[i] = rows.get(i);
+    }
+
+    JTable table = new JTable(data, columns);
+    table.setRowHeight(24);
+
+    JPanel p = new JPanel(new BorderLayout(10, 10));
+    p.setBorder(new EmptyBorder(10, 10, 10, 10));
+    p.add(new JScrollPane(table), BorderLayout.CENTER);
+    p.add(new JLabel("Your Timetable", SwingConstants.CENTER), BorderLayout.SOUTH);
+    return p;
+}
 
  private JPanel makeReportPanel() {
     JPanel p = new JPanel(new BorderLayout(10, 10));
