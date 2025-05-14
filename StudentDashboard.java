@@ -66,6 +66,7 @@ public class StudentDashboard extends JFrame {
         tabs.addTab("Attendance", makeAttendancePanel());
         tabs.addTab("Report", makeReportPanel());
         tabs.addTab("Logout", makeLogOut());
+
         getContentPane().add(tabs, BorderLayout.CENTER);
         setVisible(true);
     }
@@ -109,15 +110,128 @@ public class StudentDashboard extends JFrame {
         });
     }
 
+    
     private JPanel makeDetailsPanel() {
-        JPanel p = new JPanel(new BorderLayout());
-        p.setBorder(new EmptyBorder(20,20,20,20));
+        JPanel p = new JPanel();
+        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS)); // Use vertical BoxLayout
+        p.setBorder(new EmptyBorder(20, 20, 20, 20));
+    
+        // Add a welcome label at the top
         JLabel lbl = new JLabel("Welcome, " + studentName, SwingConstants.CENTER);
         lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 28f));
-        p.add(lbl, BorderLayout.CENTER);
+        lbl.setAlignmentX(Component.CENTER_ALIGNMENT); // Center-align the label
+        p.add(lbl);
+    
+        // Add spacing
+        p.add(Box.createRigidArea(new Dimension(0, 20)));
+    
+        // Fetch attendance data
+        double overallPercentage = 0;
+        Map<String, Double> subjectPercentages = new HashMap<>();
+        String sql = "SELECT s.name, COUNT(a.date) AS total_classes, " +
+                     "SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) AS attended_classes " +
+                     "FROM attendance a " +
+                     "JOIN subjects s ON a.subject_id = s.id " +
+                     "WHERE a.student_id = ? " +
+                     "GROUP BY s.id";
+    
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, studentId);
+            ResultSet rs = ps.executeQuery();
+            int totalClasses = 0, attendedClasses = 0;
+            while (rs.next()) {
+                String subject = rs.getString("name");
+                int subjectTotal = rs.getInt("total_classes");
+                int subjectAttended = rs.getInt("attended_classes");
+                double percentage = (subjectTotal > 0) ? (subjectAttended * 100.0) / subjectTotal : 0;
+                subjectPercentages.put(subject, percentage);
+    
+                totalClasses += subjectTotal;
+                attendedClasses += subjectAttended;
+            }
+            overallPercentage = (totalClasses > 0) ? (attendedClasses * 100.0) / totalClasses : 0;
+        } catch (SQLException ex) {
+            showError("Could not load attendance: " + ex.getMessage());
+        }
+    
+        // Add overall attendance circle
+        AttendanceCirclePanel overallCircle = new AttendanceCirclePanel("Overall", overallPercentage);
+        overallCircle.setAlignmentX(Component.CENTER_ALIGNMENT); // Center-align the circle
+        p.add(overallCircle);
+    
+        // Add spacing
+        p.add(Box.createRigidArea(new Dimension(0, 20)));
+    
+        // Add subject-wise attendance circles
+        for (Map.Entry<String, Double> entry : subjectPercentages.entrySet()) {
+            AttendanceCirclePanel subjectCircle = new AttendanceCirclePanel(entry.getKey(), entry.getValue());
+            subjectCircle.setAlignmentX(Component.CENTER_ALIGNMENT); // Center-align the circle
+            p.add(subjectCircle);
+    
+            // Add spacing between circles
+            p.add(Box.createRigidArea(new Dimension(0, 20)));
+        }
+    
         return p;
     }
 
+
+
+       // Custom JPanel to draw attendance circles
+    // This class creates a circular progress indicator for attendance percentage
+    private class AttendanceCirclePanel extends JPanel {
+        private final String label;
+        private final double percentage;
+    
+        public AttendanceCirclePanel(String label, double percentage) {
+            this.label = label;
+            this.percentage = percentage;
+            setPreferredSize(new Dimension(150, 150)); // Set size for the circle
+        }
+    
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    
+            // Determine color based on percentage
+            Color color;
+            if (percentage >= 75) {
+                color = new Color(76, 175, 80); // Green for >= 75%
+            } else if (percentage >= 50) {
+                color = new Color(255, 193, 7); // Yellow for >= 50%
+            } else {
+                color = new Color(244, 67, 54); // Red for < 50%
+            }
+    
+            // Draw the background ring
+            int diameter = Math.min(getWidth(), getHeight()) - 20;
+            int x = (getWidth() - diameter) / 2;
+            int y = (getHeight() - diameter) / 2;
+            g2d.setColor(new Color(200, 200, 200)); // Light gray for the full circle
+            g2d.setStroke(new BasicStroke(10)); // Set the thickness of the ring
+            g2d.drawArc(x, y, diameter, diameter, 0, 360);
+    
+            // Draw the progress ring
+            g2d.setColor(color);
+            g2d.drawArc(x, y, diameter, diameter, 90, -(int) (360 * (percentage / 100))); // Start from the top (90 degrees)
+    
+            // Draw the percentage text
+            g2d.setColor(Color.BLACK);
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            String text = String.format("%.1f%%", percentage);
+            FontMetrics fm = g2d.getFontMetrics();
+            int textX = (getWidth() - fm.stringWidth(text)) / 2;
+            int textY = (getHeight() + fm.getAscent()) / 2 - 10;
+            g2d.drawString(text, textX, textY);
+    
+            // Draw the label
+            g2d.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+            int labelX = (getWidth() - fm.stringWidth(label)) / 2;
+            g2d.drawString(label, labelX, textY + 20);
+        }
+    }
     private JPanel makeAttendancePanel() {
     JPanel p = new JPanel(new BorderLayout(10, 10));
     p.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -180,47 +294,69 @@ public class StudentDashboard extends JFrame {
     return p;
 }
 
-    private JPanel makeTimetablePanel() {
-        String[] cols = {"Day", "Hour", "Class", "Subject"};
-        List<Object[]> rows = new ArrayList<>();
-        String sql =
-                "SELECT t.day, t.hour, c.id, c.name, s.id, s.name " +
-                        "FROM timetable t " +
-                        " JOIN classes c ON t.class_id = c.id" +
-                        " JOIN subjects s ON t.subject_id = s.id" +
-                        " WHERE t.class_id IN (SELECT class_id FROM student_classes WHERE student_id = ?) " +
-                        " ORDER BY CASE t.day " +
-                        "    WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 " +
-                        "    WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 ELSE 5 END, t.hour";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, studentId);
-            ResultSet rs = ps.executeQuery();
-            while (rs.next())
-                rows.add(new Object[]{
-                        rs.getString(1), rs.getInt(2),
-                        rs.getInt(3), rs.getString(4),
-                        rs.getInt(5), rs.getString(6)
-                });
-        } catch (SQLException ex) {
-            showError("Could not load timetable: " + ex.getMessage());
-        }
+private JPanel makeTimetablePanel() {
+    String[] columns = {"Day", "8:00 - 9:00", "9:00 - 10:00", "10:00 - 11:00", "11:00 - 12:00", "12:00 - 1:00", "1:00 - 2:00", "2:00 - 3:00"};
+    List<Object[]> rows = new ArrayList<>();
+    String sql = "SELECT t.day, t.hour, s.name " +
+                 "FROM timetable t " +
+                 "JOIN subjects s ON t.subject_id = s.id " +
+                 "WHERE t.class_id IN (SELECT class_id FROM student_classes WHERE student_id = ?) " +
+                 "ORDER BY CASE t.day " +
+                 "    WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 " +
+                 "    WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 ELSE 5 END, t.hour";
 
-        Object[][] data = new Object[rows.size()][4];
-        for (int i = 0; i < rows.size(); i++) {
-            Object[] r = rows.get(i);
-            data[i] = new Object[]{r[0], r[1], r[3], r[5]};
-        }
-
-        JTable table = new JTable(data, cols);
-        table.setRowHeight(24);
-
-        JPanel p = new JPanel(new BorderLayout(10,10));
-        p.setBorder(new EmptyBorder(10,10,10,10));
-        p.add(new JScrollPane(table), BorderLayout.CENTER);
-        p.add(new JLabel("Your Timetable", SwingConstants.CENTER), BorderLayout.SOUTH);
-        return p;
+    // Map to store subjects for each day and period
+    Map<String, String[]> timetableData = new HashMap<>();
+    
+    // Initialize timetable data with empty subjects
+    for (String day : new String[]{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}) {
+        timetableData.put(day, new String[7]);  // 7 periods (8 AM to 3 PM)
     }
 
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        ps.setInt(1, studentId);
+        ResultSet rs = ps.executeQuery();
+        while (rs.next()) {
+            String day = rs.getString("day");
+            int hour = rs.getInt("hour") - 1;  // Adjusting index for 0-based array
+            String subject = rs.getString("name");
+
+            // Assign the subject to the corresponding day and hour
+            if (hour >= 0 && hour < 7) {
+                timetableData.get(day)[hour] = subject;
+            }
+        }
+    } catch (SQLException ex) {
+        showError("Could not load timetable: " + ex.getMessage());
+    }
+
+    // Populate rows with timetable data for each day
+    for (String day : new String[]{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}) {
+        Object[] row = new Object[columns.length];
+        row[0] = day;
+
+        String[] subjects = timetableData.get(day);
+        for (int i = 0; i < 7; i++) {
+            row[i + 1] = subjects[i] != null ? subjects[i] : "-";  // If no subject, show "-"
+        }
+
+        rows.add(row);
+    }
+
+    Object[][] data = new Object[rows.size()][columns.length];
+    for (int i = 0; i < rows.size(); i++) {
+        data[i] = rows.get(i);
+    }
+
+    JTable table = new JTable(data, columns);
+    table.setRowHeight(24);
+
+    JPanel p = new JPanel(new BorderLayout(10, 10));
+    p.setBorder(new EmptyBorder(10, 10, 10, 10));
+    p.add(new JScrollPane(table), BorderLayout.CENTER);
+    p.add(new JLabel("Your Timetable", SwingConstants.CENTER), BorderLayout.SOUTH);
+    return p;
+}
 
  private JPanel makeReportPanel() {
     JPanel p = new JPanel(new BorderLayout(10, 10));

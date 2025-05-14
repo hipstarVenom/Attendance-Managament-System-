@@ -1,10 +1,8 @@
 import java.sql.*;
-import java.util.List;
 import java.util.ArrayList;
-import java.util.Map;
 import java.util.HashMap;
-
-
+import java.util.List;
+import java.util.Map;
 
 public class DatabaseHelper {
 
@@ -84,7 +82,7 @@ public class DatabaseHelper {
                 "  student_id INTEGER NOT NULL," +
                 "  subject_id INTEGER NOT NULL," +
                 "  date TEXT NOT NULL," +
-                "  hour INTEGER NOT NULL CHECK(hour BETWEEN 1 AND 8)," +
+                "  hour INTEGER NOT NULL CHECK(hour BETWEEN 1 AND 7)," +
                 "  status TEXT CHECK(status IN ('Present', 'Absent')) NOT NULL," +
                 "  FOREIGN KEY (student_id) REFERENCES students(id)," +
                 "  FOREIGN KEY (subject_id) REFERENCES subjects(id)," +
@@ -100,7 +98,7 @@ public class DatabaseHelper {
                 "  subject_id INTEGER NOT NULL," +
                 "  teacher_id INTEGER NOT NULL," +
                 "  day TEXT NOT NULL," +
-                "  hour INTEGER NOT NULL CHECK(hour BETWEEN 1 AND 8)," +
+                "  hour INTEGER NOT NULL CHECK(hour BETWEEN 1 AND 7)," +
                 "  FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE," +
                 "  FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE," +
                 "  FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE" +
@@ -114,7 +112,8 @@ public class DatabaseHelper {
                 "('Mr. Ravi', 'ravi@college.com', 'ravi123')," +
                 "('Dr. Priya', 'priya@college.com', 'priya123')," +
                 "('Ms. Divya', 'divya@college.com', 'divya123')," +
-                "('Mr. Arjun', 'arjun@college.com', 'arjun123');"
+                "('Mr. Arjun', 'arjun@college.com', 'arjun123')," +
+                "('Mr. John', 'john@college.com', 'john123');"
             );
 
             // Dummy Subjects
@@ -124,7 +123,8 @@ public class DatabaseHelper {
                 "('Science', 'Engineering', 2)," +
                 "('English', 'Arts', 3)," +
                 "('Data Structures', 'Computer Science', 4)," +
-                "('Physics', 'Engineering', 5);"
+                "('Physics', 'Engineering', 5)," +
+                "('Chemistry', 'Engineering', 6);"
             );
 
             // Dummy Classes
@@ -136,9 +136,9 @@ public class DatabaseHelper {
             // Link class → subjects
             stmt.executeUpdate(
                 "INSERT OR IGNORE INTO class_subjects (class_id, subject_id) VALUES " +
-                "(1, 1), (1, 2), (1, 3)," +
-                "(2, 2), (2, 4), (2, 5)," +
-                "(3, 3), (3, 4), (3, 5);"
+                "(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6)," +
+                "(2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6)," +
+                "(3, 1), (3, 2), (3, 3), (3, 4), (3, 5), (3, 6);"
             );
 
             // Dummy Students
@@ -146,24 +146,33 @@ public class DatabaseHelper {
                 "INSERT OR IGNORE INTO students (name, password, email) VALUES " +
                 "('Yuva', 'yuva123', 'yuva@example.com')," +
                 "('Karthik', 'kart123', 'karthik@example.com')," +
-                "('Sneha', 'sneh123', 'sneha@example.com');"
+                "('Sneha', 'sneh123', 'sneha@example.com')," +
+                "('Raj', 'raj123', 'raj@example.com')," +
+                "('Ravi', 'ravi123', 'ravi@example.com')," +
+                "('Asha', 'asha123', 'asha@example.com')," +
+                "('Amit', 'amit123', 'amit@example.com')," +
+                "('Priya', 'priya123', 'priya@example.com')," +
+                "('Neha', 'neha123', 'neha@example.com')," +
+                "('Kiran', 'kiran123', 'kiran@example.com');"
             );
 
             // Link students to class
             stmt.executeUpdate(
                 "INSERT OR IGNORE INTO student_classes (student_id, class_id) VALUES " +
-                "(1, 1), (2, 1), (3, 2);"
+                "(1, 1), (2, 1), (3, 1), (4, 2), (5, 2), (6, 2)," +
+                "(7, 3), (8, 3), (9, 3), (10, 3);"
             );
 
-            // Sample Timetable: Monday–Friday, hours 1–3
-            stmt.executeUpdate(
-                "INSERT OR IGNORE INTO timetable (class_id, subject_id, teacher_id, day, hour) VALUES " +
-                "(1, 1, 1, 'Monday', 1),"    + "(1, 2, 2, 'Monday', 2),"    + "(1, 3, 3, 'Monday', 3)," +
-                "(1, 1, 1, 'Tuesday', 1),"   + "(1, 2, 2, 'Tuesday', 2),"   + "(1, 3, 3, 'Tuesday', 3)," +
-                "(1, 1, 1, 'Wednesday', 1)," + "(1, 2, 2, 'Wednesday', 2)," + "(1, 3, 3, 'Wednesday', 3)," +
-                "(1, 1, 1, 'Thursday', 1),"  + "(1, 2, 2, 'Thursday', 2),"  + "(1, 3, 3, 'Thursday', 3)," +
-                "(1, 1, 1, 'Friday', 1),"    + "(1, 2, 2, 'Friday', 2),"    + "(1, 3, 3, 'Friday', 3);"
-            );
+            // Sample Timetable: Monday–Friday, hours 1–7
+           // Sample Timetable: Monday–Friday, hours 1–7
+    stmt.executeUpdate(
+    "INSERT OR IGNORE INTO timetable (class_id, subject_id, teacher_id, day, hour) VALUES " +
+    "(1, 1, 1, 'Monday', 1), (1, 2, 2, 'Monday', 2), (1, 3, 3, 'Monday', 3), (1, 4, 4, 'Monday', 4), (1, 5, 5, 'Monday', 5), (1, 6, 6, 'Monday', 6), (1, 1, 1, 'Monday', 7)," +
+    "(1, 1, 1, 'Tuesday', 1), (1, 2, 2, 'Tuesday', 2), (1, 3, 3, 'Tuesday', 3), (1, 4, 4, 'Tuesday', 4), (1, 5, 5, 'Tuesday', 5), (1, 6, 6, 'Tuesday', 6), (1, 1, 1, 'Tuesday', 7)," +
+    "(1, 1, 1, 'Wednesday', 1), (1, 2, 2, 'Wednesday', 2), (1, 3, 3, 'Wednesday', 3), (1, 4, 4, 'Wednesday', 4), (1, 5, 5, 'Wednesday', 5), (1, 6, 6, 'Wednesday', 6), (1, 1, 1, 'Wednesday', 7)," +
+    "(1, 1, 1, 'Thursday', 1), (1, 2, 2, 'Thursday', 2), (1, 3, 3, 'Thursday', 3), (1, 4, 4, 'Thursday', 4), (1, 5, 5, 'Thursday', 5), (1, 6, 6, 'Thursday', 6), (1, 1, 1, 'Thursday', 7)," +
+    "(1, 1, 1, 'Friday', 1), (1, 2, 2, 'Friday', 2), (1, 3, 3, 'Friday', 3), (1, 4, 4, 'Friday', 4), (1, 5, 5, 'Friday', 5), (1, 6, 6, 'Friday', 6), (1, 1, 1, 'Friday', 7);"
+    );
 
             System.out.println("Database initialized with updated schema and data.");
         } catch (SQLException e) {
@@ -171,8 +180,7 @@ public class DatabaseHelper {
         }
     }
 
-    // Method to insert test attendance records aligned with timetable & student_classes
-public static void insertTestAttendance() {
+    public static void insertTestAttendance() {
     String dbUrl = DB_URL;
     String[] dates = {
         "2025-04-01", "2025-04-02",
@@ -180,13 +188,16 @@ public static void insertTestAttendance() {
     };
     String[] statuses = {"Present", "Absent"};
 
+    // SQL to fetch the timetable details
     String fetchTimetableSql =
         "SELECT class_id, subject_id, hour " +
         "FROM timetable";
 
+    // SQL to fetch students for a specific class
     String fetchStudentsSql =
         "SELECT student_id FROM student_classes WHERE class_id = ?";
 
+    // SQL to insert attendance data
     String insertSql =
         "INSERT OR IGNORE INTO attendance " +
         "(student_id, subject_id, date, hour, status) " +
@@ -251,6 +262,4 @@ public static void insertTestAttendance() {
 }
 
 
-
 }
-

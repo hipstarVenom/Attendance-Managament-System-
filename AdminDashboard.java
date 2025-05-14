@@ -4,10 +4,13 @@ import javax.swing.table.DefaultTableModel;
 import com.formdev.flatlaf.FlatLightLaf;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.sql.*;
 import java.util.Vector;
+import java.util.List;
 
 public class AdminDashboard extends JFrame {
     private static final String DB_URL = "jdbc:sqlite:college.db";
@@ -44,6 +47,8 @@ public class AdminDashboard extends JFrame {
         tabs.addTab("View Teachers",      makeViewTeachersPanel());
         tabs.addTab("Add/Delete Class",   makeAddDeleteClassPanel());
         tabs.addTab("View Classes",       makeViewClassesPanel());
+        tabs.addTab("Add/Delete Subject", makeAddDeleteSubjectPanel());
+        tabs.addTab("View Subjects", makeViewSubjectsPanel());
         tabs.addTab("Generate Report",    makeReportPanel());
         tabs.addTab("Logout",             makeLogoutPanel());
 
@@ -58,8 +63,32 @@ public class AdminDashboard extends JFrame {
         p.add(lbl, BorderLayout.CENTER);
         return p;
     }
+    private void addTeacherToSubject(int subjectId, int teacherId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "UPDATE subjects SET teacher_id = ? WHERE id = ?")) {
+            ps.setInt(1, teacherId);
+            ps.setInt(2, subjectId);
+            ps.executeUpdate();
+        }
+    }
 
-    // ---- Add/Delete Student ----
+    private void loadSubjectsForView(DefaultTableModel model) {
+        model.setRowCount(0);
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT id, name, department, teacher_id FROM subjects")) {
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getString("department"),
+                        rs.getInt("teacher_id")
+                });
+            }
+        } catch (SQLException ex) {
+            showError(ex.getMessage());
+        }
+    }
+  // ---- Add/Delete Student ----
     private JPanel makeAddDeleteStudentPanel() {
         DefaultTableModel model = new DefaultTableModel(new String[]{"ID","Name","Email"},0);
         JTable table = new JTable(model);
@@ -122,18 +151,31 @@ public class AdminDashboard extends JFrame {
     private void loadStudents(DefaultTableModel m) {
         m.setRowCount(0);
         try (Statement st = conn.createStatement();
-             ResultSet rs = st.executeQuery("SELECT id,name,email FROM students")) {
-            while (rs.next()) m.addRow(new Object[]{rs.getInt(1),rs.getString(2),rs.getString(3)});
-        } catch(SQLException ex){ showError(ex.getMessage()); }
+             ResultSet rs = st.executeQuery(
+                 "SELECT s.id, s.name, s.email, c.name AS class_name " +
+                 "FROM students s " +
+                 "LEFT JOIN student_classes sc ON s.id = sc.student_id " +
+                 "LEFT JOIN classes c ON sc.class_id = c.id")) {
+            while (rs.next()) {
+                m.addRow(new Object[]{
+                    rs.getInt("id"),
+                    rs.getString("name"),
+                    rs.getString("email"),
+                    rs.getString("class_name") != null ? rs.getString("class_name") : "No Class"
+                });
+            }
+        } catch (SQLException ex) {
+            showError(ex.getMessage());
+        }
     }
-
+    
     private JPanel makeViewStudentsPanel() {
-        DefaultTableModel m = new DefaultTableModel(new String[]{"ID","Name","Email"},0);
+        DefaultTableModel m = new DefaultTableModel(new String[]{"ID", "Name", "Email", "Class"}, 0);
         JTable t = new JTable(m);
         JButton r = new JButton("Refresh");
         r.addActionListener(e -> loadStudents(m));
         JPanel p = new JPanel(new BorderLayout());
-        p.setBorder(new EmptyBorder(10,10,10,10));
+        p.setBorder(new EmptyBorder(10, 10, 10, 10));
         p.add(new JScrollPane(t), BorderLayout.CENTER);
         p.add(r, BorderLayout.SOUTH);
         loadStudents(m);
@@ -193,21 +235,38 @@ public class AdminDashboard extends JFrame {
         return p;
     }
 
+
     private void loadTeachers(DefaultTableModel m) {
         m.setRowCount(0);
         try (Statement st = conn.createStatement();
-             ResultSet rs = st.executeQuery("SELECT id,name,email FROM teachers")) {
-            while (rs.next()) m.addRow(new Object[]{rs.getInt(1),rs.getString(2),rs.getString(3)});
-        } catch(SQLException ex){ showError(ex.getMessage()); }
+             ResultSet rs = st.executeQuery(
+                 "SELECT DISTINCT t.id AS teacher_id, t.name AS teacher_name, t.email AS teacher_email, " +
+                 "c.name AS class_name, s.name AS subject_name " +
+                 "FROM teachers t " +
+                 "LEFT JOIN timetable tt ON t.id = tt.teacher_id " +
+                 "LEFT JOIN classes c ON tt.class_id = c.id " +
+                 "LEFT JOIN subjects s ON tt.subject_id = s.id " +
+                 "ORDER BY t.id, c.name, s.name")) {
+            while (rs.next()) {
+                m.addRow(new Object[]{
+                    rs.getInt("teacher_id"),
+                    rs.getString("teacher_name"),
+                    rs.getString("teacher_email"),
+                    rs.getString("class_name") != null ? rs.getString("class_name") : "No Class",
+                    rs.getString("subject_name") != null ? rs.getString("subject_name") : "No Subject"
+                });
+            }
+        } catch (SQLException ex) {
+            showError(ex.getMessage());
+        }
     }
-
     private JPanel makeViewTeachersPanel() {
-        DefaultTableModel m = new DefaultTableModel(new String[]{"ID","Name","Email"},0);
+        DefaultTableModel m = new DefaultTableModel(new String[]{"ID", "Name", "Email", "Class", "Subject"}, 0);
         JTable t = new JTable(m);
         JButton r = new JButton("Refresh");
         r.addActionListener(e -> loadTeachers(m));
         JPanel p = new JPanel(new BorderLayout());
-        p.setBorder(new EmptyBorder(10,10,10,10));
+        p.setBorder(new EmptyBorder(10, 10, 10, 10));
         p.add(new JScrollPane(t), BorderLayout.CENTER);
         p.add(r, BorderLayout.SOUTH);
         loadTeachers(m);
@@ -268,16 +327,322 @@ public class AdminDashboard extends JFrame {
     }
 
     private JPanel makeViewClassesPanel() {
-        DefaultTableModel m = new DefaultTableModel(new String[]{"ID","Name"},0);
-        JTable t = new JTable(m);
-        JButton r = new JButton("Refresh");
-        r.addActionListener(e -> loadClasses(m));
+        DefaultTableModel classModel = new DefaultTableModel(new String[]{"ID", "Name"}, 0);
+        JTable classTable = new JTable(classModel);
+        JButton refresh = new JButton("Refresh");
+        JButton viewDetails = new JButton("View Details");
+    
+        refresh.addActionListener(e -> loadClasses(classModel));
+    
+        viewDetails.addActionListener(e -> {
+            int selectedRow = classTable.getSelectedRow();
+            if (selectedRow < 0) {
+                showError("Please select a class to view details.");
+                return;
+            }
+            int classId = (int) classModel.getValueAt(selectedRow, 0);
+            String className = (String) classModel.getValueAt(selectedRow, 1);
+            showClassDetails(classId, className);
+        });
+    
+        JPanel btnPanel = new JPanel();
+        btnPanel.add(refresh);
+        btnPanel.add(viewDetails);
+    
         JPanel p = new JPanel(new BorderLayout());
-        p.setBorder(new EmptyBorder(10,10,10,10));
-        p.add(new JScrollPane(t), BorderLayout.CENTER);
-        p.add(r, BorderLayout.SOUTH);
-        loadClasses(m);
+        p.setBorder(new EmptyBorder(10, 10, 10, 10));
+        p.add(new JScrollPane(classTable), BorderLayout.CENTER);
+        p.add(btnPanel, BorderLayout.SOUTH);
+    
+        loadClasses(classModel);
         return p;
+    }
+    
+    private void showClassDetails(int classId, String className) {
+        JDialog dialog = new JDialog(this, "Class Details - " + className, true);
+        dialog.setSize(600, 400);
+        dialog.setLayout(new BorderLayout());
+    
+        // Students Table
+        DefaultTableModel studentModel = new DefaultTableModel(new String[]{"ID", "Name", "Email"}, 0);
+        JTable studentTable = new JTable(studentModel);
+        loadClassStudents(classId, studentModel);
+    
+        // Add and Delete Buttons
+        JButton addStudent = new JButton("Add Student");
+        JButton deleteStudent = new JButton("Delete Student");
+        JButton importStudents = new JButton("Import Students from Text File");
+    
+        // Add Student
+        addStudent.addActionListener(e -> {
+            String studentId = JOptionPane.showInputDialog(dialog, "Enter Student ID:");
+            if (studentId != null && !studentId.isBlank()) {
+                try {
+                    addStudentToClass(classId, Integer.parseInt(studentId));
+                    loadClassStudents(classId, studentModel);
+                } catch (NumberFormatException ex) {
+                    showError("Invalid Student ID.");
+                }
+            }
+        });
+    
+        // Delete Student
+        deleteStudent.addActionListener(e -> {
+            int selectedRow = studentTable.getSelectedRow();
+            if (selectedRow < 0) {
+                showError("Please select a student to delete.");
+                return;
+            }
+            int studentId = (int) studentModel.getValueAt(selectedRow, 0);
+            deleteStudentFromClass(classId, studentId);
+            loadClassStudents(classId, studentModel);
+        });
+    
+        // Import Students from Text File
+        importStudents.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            int result = fileChooser.showOpenDialog(dialog);
+            if (result == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                importStudentsFromTextFile(file, classId, studentModel);
+            }
+        });
+    
+        JPanel btnPanel = new JPanel();
+        btnPanel.add(addStudent);
+        btnPanel.add(deleteStudent);
+        btnPanel.add(importStudents);
+    
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.addTab("Students", new JScrollPane(studentTable));    
+        dialog.add(tabs, BorderLayout.CENTER);
+        dialog.add(btnPanel, BorderLayout.SOUTH);
+        dialog.setVisible(true);
+    }
+
+
+    private void importStudentsFromTextFile(File file, int classId, DefaultTableModel model) {
+    try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+        String line;
+        while ((line = br.readLine()) != null) {
+            String[] parts = line.split(",");
+            if (parts.length != 3) {
+                showError("Invalid line format: " + line);
+                continue;
+            }
+
+            int studentId = Integer.parseInt(parts[0].trim());
+            String name = parts[1].trim();
+            String email = parts[2].trim();
+
+            // Insert student into the database
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT OR IGNORE INTO students (id, name, email) VALUES (?, ?, ?)")) {
+                ps.setInt(1, studentId);
+                ps.setString(2, name);
+                ps.setString(3, email);
+                ps.executeUpdate();
+            }
+
+            // Link student to the class
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT OR IGNORE INTO student_classes (student_id, class_id) VALUES (?, ?)")) {
+                ps.setInt(1, studentId);
+                ps.setInt(2, classId);
+                ps.executeUpdate();
+            }
+        }
+
+        // Refresh the student table
+        loadClassStudents(classId, model);
+        JOptionPane.showMessageDialog(this, "Students imported successfully!");
+
+    } catch (Exception ex) {
+        showError("Failed to import students: " + ex.getMessage());
+    }
+}
+    private void deleteStudentFromClass(int classId, int studentId) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "DELETE FROM student_classes WHERE class_id = ? AND student_id = ?")) {
+            ps.setInt(1, classId);
+            ps.setInt(2, studentId);
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            showError(ex.getMessage());
+        }
+    }
+
+
+    private void loadClassStudents(int classId, DefaultTableModel model) {
+        model.setRowCount(0);
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT s.id, s.name, s.email FROM students s " +
+                "JOIN student_classes sc ON s.id = sc.student_id " +
+                "WHERE sc.class_id = ?")) {
+            ps.setInt(1, classId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    model.addRow(new Object[]{
+                            rs.getInt("id"),
+                            rs.getString("name"),
+                            rs.getString("email")
+                    });
+                }
+            }
+        } catch (SQLException ex) {
+            showError(ex.getMessage());
+        }
+    }
+    
+    
+    private void addStudentToClass(int classId, int studentId) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "INSERT INTO student_classes (student_id, class_id) VALUES (?, ?)")) {
+            ps.setInt(1, studentId);
+            ps.setInt(2, classId);
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            showError(ex.getMessage());
+        }
+    }
+
+    private JPanel makeAddDeleteSubjectPanel() {
+        DefaultTableModel model = new DefaultTableModel(new String[]{"ID", "Name", "Department"}, 0);
+        JTable table = new JTable(model);
+    
+        // Form for adding a subject
+        JPanel form = new JPanel(new GridLayout(0, 2, 5, 5));
+        JTextField nameF = new JTextField(), departmentF = new JTextField();
+        form.add(new JLabel("Subject Name:")); form.add(nameF);
+        form.add(new JLabel("Department:")); form.add(departmentF);
+    
+        // Add Subject Button
+        JButton add = new JButton("Add Subject");
+        style(add);
+        add.addActionListener(e -> {
+            String name = nameF.getText();
+            String department = departmentF.getText();
+    
+            if (name.isBlank() || department.isBlank()) {
+                showError("All fields are required.");
+                return;
+            }
+    
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO subjects (name, department) VALUES (?, ?)")) {
+                ps.setString(1, name);
+                ps.setString(2, department);
+                ps.executeUpdate();
+                loadSubjects(model);
+                nameF.setText(""); departmentF.setText("");
+            } catch (SQLException ex) {
+                showError(ex.getMessage());
+            }
+        });
+    
+        // Delete Subject Button
+        JButton delete = new JButton("Delete Subject");
+        style(delete);
+        delete.addActionListener(e -> {
+            int selectedRow = table.getSelectedRow();
+            if (selectedRow < 0) {
+                showError("Please select a subject to delete.");
+                return;
+            }
+    
+            int subjectId = (int) model.getValueAt(selectedRow, 0);
+            try (PreparedStatement ps = conn.prepareStatement("DELETE FROM subjects WHERE id = ?")) {
+                ps.setInt(1, subjectId);
+                ps.executeUpdate();
+                loadSubjects(model);
+            } catch (SQLException ex) {
+                showError(ex.getMessage());
+            }
+        });
+    
+        // Refresh Button
+        JButton refresh = new JButton("Refresh");
+        refresh.addActionListener(e -> loadSubjectsForView(model));
+    
+        // Layout
+        JPanel top = new JPanel(new BorderLayout());
+        top.add(form, BorderLayout.CENTER);
+        top.add(add, BorderLayout.EAST);
+    
+        JPanel bottom = new JPanel(new BorderLayout());
+        JPanel buttons = new JPanel();
+        buttons.add(delete);
+        buttons.add(refresh);
+        bottom.add(new JScrollPane(table), BorderLayout.CENTER);
+        bottom.add(buttons, BorderLayout.SOUTH);
+    
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        panel.add(top, BorderLayout.NORTH);
+        panel.add(bottom, BorderLayout.CENTER);
+    
+        loadSubjects(model);
+        return panel;
+    }
+    private JPanel makeViewSubjectsPanel() {
+        DefaultTableModel model = new DefaultTableModel(new String[]{"ID", "Name", "Department", "Teacher ID"}, 0);
+        JTable table = new JTable(model);
+    
+        // Refresh Button
+        JButton refresh = new JButton("Refresh");
+        refresh.addActionListener(e -> loadSubjects(model));
+    
+        // Add Teacher to Subject Button
+        JButton addTeacher = new JButton("Add Teacher to Subject");
+        addTeacher.addActionListener(e -> {
+            int selectedRow = table.getSelectedRow();
+            if (selectedRow < 0) {
+                showError("Please select a subject to add a teacher.");
+                return;
+            }
+    
+            int subjectId = (int) model.getValueAt(selectedRow, 0);
+            String teacherId = JOptionPane.showInputDialog(this, "Enter Teacher ID:");
+            if (teacherId != null && !teacherId.isBlank()) {
+                try {
+                    addTeacherToSubject(subjectId, Integer.parseInt(teacherId));
+                    loadSubjects(model);
+                } catch (NumberFormatException ex) {
+                    showError("Invalid Teacher ID.");
+                } catch (SQLException ex) {
+                    showError(ex.getMessage());
+                }
+            }
+        });
+    
+        // Layout
+        JPanel btnPanel = new JPanel();
+        btnPanel.add(refresh);
+        btnPanel.add(addTeacher);
+    
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        panel.add(btnPanel, BorderLayout.SOUTH);
+    
+        loadSubjects(model);
+        return panel;
+    }
+    private void loadSubjects(DefaultTableModel model) {
+        model.setRowCount(0);
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT id, name, department, teacher_id FROM subjects")) {
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getString("department"),
+                        rs.getInt("teacher_id")
+                });
+            }
+        } catch (SQLException ex) {
+            showError(ex.getMessage());
+        }
     }
 
     // ---- Generate Report ----
@@ -481,11 +846,8 @@ private PreparedStatement constructClassFilterQuery(String stu, String subj) thr
         JPanel p = new JPanel(new BorderLayout());
         JButton b = new JButton("Logout"); style(b);
         b.addActionListener(e -> {
-            if (JOptionPane.showConfirmDialog(this, "Logout?", "Confirm", JOptionPane.YES_NO_OPTION) 
-                    == JOptionPane.YES_OPTION) {
                 dispose();
-                System.exit(0);
-            }
+                new LoginForm(); 
         });
         p.add(b, BorderLayout.CENTER);
         return p;
